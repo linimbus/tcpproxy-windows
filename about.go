@@ -92,13 +92,13 @@ func AboutAction( mw *walk.MainWindow ) {
 			PushButton{
 				Text:      "Paypal.me",
 				OnClicked: func() {
-					OpenBrowserWeb("https://paypal.me/lixiangyun")
+					OpenBrowserWeb("https://paypal.me/linimbus")
 				},
 			},
 			PushButton{
 				Text:      "Official Web",
 				OnClicked: func() {
-					OpenBrowserWeb("https://github.com/lixiangyun/tcpproxy")
+					OpenBrowserWeb("https://github.com/linimbus/tcpproxy")
 				},
 			},
 			PushButton{
