@@ -1,75 +1,95 @@
 package main
 
 import (
+	"crypto/tls"
 	"fmt"
-	"github.com/astaxie/beego/logs"
 	"net"
 	"sync"
 	"sync/atomic"
 	"time"
+
+	"github.com/astaxie/beego/logs"
 )
 
 type LinkChannel struct {
 	key    string
 	remote net.Conn
-	proxy  net.Conn
-	resvflow int64
-	sendflow int64
+	local  net.Conn
 }
 
 type LinkInstance struct {
 	sync.RWMutex
 	sync.WaitGroup
 
-	close bool
-
-	addr string
-	lb   LoadBalance
-	cfg *LinkConfig
-	list net.Listener
+	close    bool
+	address  string
+	config   LinkConfig
+	server   *tls.Config
+	client   *tls.Config
+	flow     int64
+	listen   net.Listener
 	channels map[string]*LinkChannel
 }
 
-func NewLinkInstance(item *LinkConfig) (*LinkInstance, error) {
-	address := fmt.Sprintf("%s:%d", item.Iface, item.Port)
-	list, err := net.Listen("tcp", address)
+func NewLinkInstance(config LinkConfig) (*LinkInstance, error) {
+	address := fmt.Sprintf("%s:%d", config.Address, config.Port)
+
+	listen, err := net.Listen(config.Protocol, address)
 	if err != nil {
+		logs.Error(err.Error())
 		return nil, err
 	}
 
 	link := new(LinkInstance)
-	link.addr = address
-	link.list = list
-	link.channels = make(map[string]*LinkChannel, 1024)
-	link.cfg = item
-	link.lb = NewLoadBalance(item.Mode, item.Backend)
+	link.address = address
+	link.listen = listen
+	link.channels = make(map[string]*LinkChannel, 128)
+	link.config = config
+
+	if config.Tls != "NULL" {
+		link.server, err = TlsConfigServer(config.Address, config.Tls)
+		if err != nil {
+			logs.Error(err.Error())
+			return nil, err
+		}
+	}
+
+	if config.Backend.Tls != "NULL" {
+		link.client, err = TlsConfigClient(config.Backend.Address, config.Address, config.Tls)
+		if err != nil {
+			logs.Error(err.Error())
+			return nil, err
+		}
+	}
 
 	link.Add(1)
 	go link.start()
+
 	return link, nil
 }
 
-func (l *LinkInstance)proxy(wg *sync.WaitGroup, conn1 net.Conn)  {
+func (l *LinkInstance) proxy(wg *sync.WaitGroup, local net.Conn) {
 	var err error
-	var conn2 net.Conn
+	var remote net.Conn
 
 	defer func() {
 		wg.Done()
-		conn1.Close()
-		if conn2 != nil {
-			conn2.Close()
+		local.Close()
+		if remote != nil {
+			remote.Close()
 		}
 	}()
 
-	key   := conn1.RemoteAddr().String()
-	idx   := l.lb.Next(key)
-	proxy := l.cfg.Backend[idx]
+	key := local.RemoteAddr().String()
+	backend := l.config.Backend
 
-	if proxy.Timeout == 0 {
-		conn2, err = net.Dial("tcp", proxy.Address )
+	address := fmt.Sprintf("%s:%d", backend.Address, backend.Port)
+
+	if backend.Timeout == 0 {
+		remote, err = net.Dial(backend.Protocol, address)
 	} else {
-		timeout := time.Second * time.Duration(proxy.Timeout)
-		conn2, err = net.DialTimeout("tcp", proxy.Address, timeout)
+		timeout := time.Second * time.Duration(backend.Timeout)
+		remote, err = net.DialTimeout(backend.Protocol, address, timeout)
 	}
 
 	if err != nil {
@@ -77,9 +97,17 @@ func (l *LinkInstance)proxy(wg *sync.WaitGroup, conn1 net.Conn)  {
 		return
 	}
 
+	if l.client != nil {
+		remote = tls.Client(remote, l.client)
+	}
+
+	if l.server != nil {
+		local = tls.Server(local, l.server)
+	}
+
 	channel := new(LinkChannel)
-	channel.remote = conn1
-	channel.proxy = conn2
+	channel.remote = remote
+	channel.local = local
 	channel.key = key
 
 	l.Lock()
@@ -88,8 +116,8 @@ func (l *LinkInstance)proxy(wg *sync.WaitGroup, conn1 net.Conn)  {
 
 	wg2 := new(sync.WaitGroup)
 	wg2.Add(2)
-	go connect(wg2, conn1, conn2, &channel.sendflow)
-	go connect(wg2, conn2, conn1, &channel.resvflow)
+	go connect(wg2, local, remote, &l.flow)
+	go connect(wg2, remote, local, &l.flow)
 	wg2.Wait()
 
 	l.Lock()
@@ -97,16 +125,16 @@ func (l *LinkInstance)proxy(wg *sync.WaitGroup, conn1 net.Conn)  {
 	l.Unlock()
 }
 
-func (l *LinkInstance)start()  {
+func (l *LinkInstance) start() {
 	defer l.Done()
-	logs.Info("link instance %s start", l.addr)
+	logs.Info("link instance %s start", l.address)
 
 	wg := new(sync.WaitGroup)
-	for  {
+	for {
 		if l.close {
 			break
 		}
-		conn, err := l.list.Accept()
+		conn, err := l.listen.Accept()
 		if err != nil {
 			logs.Error(err.Error())
 			continue
@@ -116,59 +144,51 @@ func (l *LinkInstance)start()  {
 	}
 	wg.Wait()
 
-	logs.Info("link instance %s shutdown", l.addr)
+	logs.Info("link instance %s shutdown", l.address)
 }
 
-func (l *LinkInstance)Close()  {
+func (l *LinkInstance) Close() {
 	l.Lock()
 	l.close = true
-	l.list.Close()
+	l.listen.Close()
 	for _, v := range l.channels {
 		v.remote.Close()
 	}
 	l.Unlock()
 
 	l.Wait()
-	logs.Info("link instance %s close", l.addr)
+	logs.Info("link instance %s close", l.address)
 }
 
-func (l *LinkInstance)Channels() int {
+func (l *LinkInstance) Channels() int {
 	l.RLock()
 	defer l.RUnlock()
 	return len(l.channels)
 }
 
-func (l *LinkInstance)Flows() int64 {
+func (l *LinkInstance) Flows() int64 {
 	l.RLock()
 	defer l.RUnlock()
 
-	var resv, send int64
-	for _, v := range l.channels {
-		resv += v.resvflow
-		send += v.sendflow
-	}
-	return resv + send
+	return l.flow
 }
 
-
-func connect(wg *sync.WaitGroup, conn1 net.Conn, conn2 net.Conn, flow *int64)  {
+func connect(wg *sync.WaitGroup, local net.Conn, remote net.Conn, flow *int64) {
 	defer func() {
 		wg.Done()
 	}()
 
 	var buf [8192]byte
-	for  {
-		cnt, err1 := conn1.Read(buf[:])
+	for {
+		cnt, err1 := local.Read(buf[:])
 		if cnt > 0 {
-			err2 := WriteFull(conn2, buf[:cnt])
+			err2 := WriteFull(remote, buf[:cnt])
 			if err2 != nil {
-				logs.Error(err2.Error())
 				return
 			}
 			atomic.AddInt64(flow, int64(cnt))
 		}
 		if err1 != nil {
-			logs.Error(err1.Error())
 			return
 		}
 	}

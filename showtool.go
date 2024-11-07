@@ -2,80 +2,66 @@ package main
 
 import (
 	"fmt"
+
 	"github.com/astaxie/beego/logs"
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
 )
 
-func ShowToolBar(cfg * LinkConfig)  {
+func ShowToolBar(cfg *LinkConfig) {
 	var dlg *walk.Dialog
 	var acceptPB *walk.PushButton
-	var backendView *walk.TableView
-
-	backendTable := new(BackendModel)
-	backendTable.Input(cfg.Backend)
 
 	cnt, err := Dialog{
-		AssignTo: &dlg,
-		Title: "Link Detail",
-		Icon: walk.IconInformation(),
+		AssignTo:      &dlg,
+		Title:         "Link Detail",
+		Icon:          walk.IconInformation(),
 		DefaultButton: &acceptPB,
-		Size: Size{400, 300},
-		MinSize: Size{400, 300},
-		Layout:  VBox{
+		Size:          Size{250, 150},
+		MinSize:       Size{250, 150},
+		Layout: VBox{
 			Alignment: AlignHNearVCenter,
-			Margins: Margins{Top: 10, Bottom: 10, Left: 10, Right: 10},
+			Margins:   Margins{Top: 10, Bottom: 10, Left: 10, Right: 10},
 		},
 		Children: []Widget{
 			Composite{
 				Layout: Grid{Columns: 2},
 				Children: []Widget{
 					Label{
-						Text: "Bind Address:",
+						Text: "Listen Address:",
 					},
 					Label{
-						Text: fmt.Sprintf("%s:%d",
-							cfg.Iface, cfg.Port),
+						Text: cfg.Address,
 					},
 					Label{
-						Text: "Bind Timeout:",
+						Text: "Listen Port:",
 					},
 					Label{
-						Text: fmt.Sprintf("%d Second", cfg.Timeout),
+						Text: fmt.Sprintf("%d", cfg.Port),
 					},
 					Label{
-						Text: "Load Balance:",
+						Text: "Listen Tls:",
 					},
 					Label{
-						Text: cfg.Mode,
+						Text: cfg.Tls,
 					},
-				},
-			},
-			Composite{
-				Layout: VBox{},
-				Children: []Widget{
 					Label{
-						Text: "Backend List:",
+						Text: "Backend Address:",
 					},
-					TableView{
-						AssignTo: &backendView,
-						AlternatingRowBG: true,
-						ColumnsOrderable: true,
-						Columns: []TableViewColumn{
-							{Title: "#", Width: 20},
-							{Title: "Address", Width: 110},
-							{Title: "Timeout", Width: 50},
-							{Title: "Weight", Width: 50},
-							{Title: "Main/Standby", Width: 80},
-						},
-						StyleCell: func(style *walk.CellStyle) {
-							if style.Row()%2 == 0 {
-								style.BackgroundColor = walk.RGB(248, 248, 255)
-							} else {
-								style.BackgroundColor = walk.RGB(220, 220, 220)
-							}
-						},
-						Model: backendTable,
+					Label{
+						Text: cfg.Backend.Address,
+					},
+					Label{
+						Text: "Backend Port:",
+					},
+					Label{
+						Text: fmt.Sprintf("%d", cfg.Backend.Port),
+					},
+					Label{
+						Text: "Backend Tls:",
+					},
+					Label{
+						Text: cfg.Backend.Tls,
 					},
 				},
 			},
@@ -84,7 +70,7 @@ func ShowToolBar(cfg * LinkConfig)  {
 				Children: []Widget{
 					PushButton{
 						AssignTo: &acceptPB,
-						Text: "OK",
+						Text:     "OK",
 						OnClicked: func() {
 							dlg.Cancel()
 						},

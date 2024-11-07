@@ -1,14 +1,15 @@
 package main
 
 import (
+	"os/exec"
+
 	"github.com/astaxie/beego/logs"
 	"github.com/lxn/walk"
 	. "github.com/lxn/walk/declarative"
-	"os/exec"
 )
 
-func OpenBrowserWeb(url string)  {
-	cmd := exec.Command("rundll32","url.dll,FileProtocolHandler", url)
+func OpenBrowserWeb(url string) {
+	cmd := exec.Command("rundll32", "url.dll,FileProtocolHandler", url)
 	err := cmd.Run()
 	if err != nil {
 		logs.Error("run cmd fail, %s", err.Error())
@@ -20,8 +21,8 @@ var aboutContext = ""
 var image1 walk.Image
 var image2 walk.Image
 
-func AboutAction( mw *walk.MainWindow ) {
-	var ok    *walk.PushButton
+func AboutAction(mw *walk.MainWindow) {
+	var ok *walk.PushButton
 	var about *walk.Dialog
 	var err error
 
@@ -47,22 +48,22 @@ func AboutAction( mw *walk.MainWindow ) {
 		Icon:          walk.IconInformation(),
 		MinSize:       Size{Width: 300, Height: 200},
 		DefaultButton: &ok,
-		Layout:  VBox{},
+		Layout:        VBox{},
 		Children: []Widget{
 			TextLabel{
-				Text: aboutContext,
-				MinSize:       Size{Width: 250, Height: 200},
-				MaxSize:       Size{Width: 290, Height: 400},
+				Text:    aboutContext,
+				MinSize: Size{Width: 250, Height: 200},
+				MaxSize: Size{Width: 290, Height: 400},
 			},
 			Label{
-				Text: "Version: "+ VersionGet(),
+				Text:          "Version: " + VersionGet(),
 				TextAlignment: AlignCenter,
 			},
 			VSpacer{
 				MinSize: Size{Height: 10},
 			},
 			Label{
-				Text: "Sponsor",
+				Text:          "Sponsor",
 				TextAlignment: AlignCenter,
 			},
 			Composite{
@@ -73,16 +74,16 @@ func AboutAction( mw *walk.MainWindow ) {
 					},
 					ImageView{
 						ToolTipText: "Ali Pay",
-						Image:    image1,
-						MaxSize:  Size{80, 80},
+						Image:       image1,
+						MaxSize:     Size{80, 80},
 					},
 					HSpacer{
 						MinSize: Size{Width: 10},
 					},
 					ImageView{
 						ToolTipText: "Wecart Pay",
-						Image:    image2,
-						MaxSize:  Size{80, 80},
+						Image:       image2,
+						MaxSize:     Size{80, 80},
 					},
 					HSpacer{
 						MinSize: Size{Width: 10},
@@ -90,15 +91,15 @@ func AboutAction( mw *walk.MainWindow ) {
 				},
 			},
 			PushButton{
-				Text:      "Paypal.me",
+				Text: "Paypal.me",
 				OnClicked: func() {
-					OpenBrowserWeb("https://paypal.me/linimbus")
+					OpenBrowserWeb("https://www.paypal.com/paypalme/lixiangyun")
 				},
 			},
 			PushButton{
-				Text:      "Official Web",
+				Text: "Official Web",
 				OnClicked: func() {
-					OpenBrowserWeb("https://github.com/linimbus/tcpproxy")
+					OpenBrowserWeb("https://github.com/linimbus/tcpproxy-windows")
 				},
 			},
 			PushButton{

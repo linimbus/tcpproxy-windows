@@ -3,35 +3,36 @@ package main
 import (
 	"encoding/json"
 	"fmt"
-	"github.com/astaxie/beego/logs"
-	"io/ioutil"
+	"os"
 	"sync"
 	"time"
+
+	"github.com/astaxie/beego/logs"
 )
 
 type Link struct {
-	Cfg      *LinkConfig
-	LastFlow  int64
-	Bind      string
+	Cfg      LinkConfig
+	LastFlow int64
+	Bind     string
 	Instance *LinkInstance
 }
 
 type LinkCtrl struct {
 	sync.RWMutex
 
-	Cache   []*Link
+	Cache []*Link
 }
 
 var linkCtrl *LinkCtrl
 
-func init()  {
+func init() {
 	linkCtrl = new(LinkCtrl)
 	linkCtrl.Cache = make([]*Link, 0)
 
 	go consoleUpdate()
 }
 
-func LinkDelele(binds []string)  {
+func LinkDelele(binds []string) {
 	linkCtrl.Lock()
 	defer linkCtrl.Unlock()
 
@@ -52,7 +53,7 @@ func LinkDelele(binds []string)  {
 	syncToFile()
 }
 
-func LinkStart(binds []string)  {
+func LinkStart(binds []string) {
 	linkCtrl.Lock()
 	defer linkCtrl.Unlock()
 
@@ -83,12 +84,12 @@ func LinkFind(bind string) *LinkConfig {
 		if v.Bind != bind {
 			continue
 		}
-		return v.Cfg
+		return &v.Cfg
 	}
 	return nil
 }
 
-func LinkStop(binds []string)  {
+func LinkStop(binds []string) {
 	linkCtrl.Lock()
 	defer linkCtrl.Unlock()
 
@@ -107,7 +108,7 @@ func LinkStop(binds []string)  {
 	}
 }
 
-func LinkAdd(cfg *LinkConfig) error {
+func LinkAdd(cfg LinkConfig) error {
 	value, err := json.Marshal(cfg)
 	if err != nil {
 		return err
@@ -119,7 +120,7 @@ func LinkAdd(cfg *LinkConfig) error {
 		return err
 	}
 
-	bind := fmt.Sprintf("%s:%d", cfg.Iface, cfg.Port)
+	bind := fmt.Sprintf("%s:%d", cfg.Address, cfg.Port)
 
 	linkCtrl.Lock()
 	linkCtrl.Cache = append(linkCtrl.Cache, &Link{
@@ -148,18 +149,18 @@ func AddLinkItemToConsole(link *Link, idx int) *LinkItem {
 	}
 
 	return &LinkItem{
-		Index: idx,
-		Bind: link.Bind,
-		Mode: link.Cfg.Mode,
-		Count: count,
-		Speed: speed/2,
-		Status: status,
+		Index:   idx,
+		Bind:    link.Bind,
+		Count:   count,
+		Speed:   speed,
+		Traffic: total,
+		Status:  status,
 	}
 }
 
-func consoleUpdate()  {
-	time.Sleep(time.Second)
-	for  {
+func consoleUpdate() {
+	time.Sleep(3 * time.Second)
+	for {
 		linkCtrl.RLock()
 		var output []*LinkItem
 		for idx, v := range linkCtrl.Cache {
@@ -167,19 +168,20 @@ func consoleUpdate()  {
 		}
 		LinkTalbeUpdate(output)
 		linkCtrl.RUnlock()
-		time.Sleep(2 * time.Second)
+
+		time.Sleep(time.Second)
 	}
 }
 
-func syncToFile()  {
-	file := fmt.Sprintf("%s\\link.json", appDataDir())
+func syncToFile() {
+	file := fmt.Sprintf("%s\\linkconfig.json", appDataDir())
 
 	var output []LinkConfig
 	for _, v := range linkCtrl.Cache {
-		output = append(output, *v.Cfg)
+		output = append(output, v.Cfg)
 	}
 
-	value, err := json.Marshal(output)
+	value, err := json.MarshalIndent(output, "", "\t")
 	if err != nil {
 		logs.Error(err.Error())
 		return
@@ -193,9 +195,9 @@ func syncToFile()  {
 }
 
 func LinkInit() error {
-	file := fmt.Sprintf("%s\\link.json", appDataDir())
+	file := fmt.Sprintf("%s\\linkconfig.json", appDataDir())
 
-	value, err := ioutil.ReadFile(file)
+	value, err := os.ReadFile(file)
 	if err != nil {
 		logs.Error(err.Error())
 		return nil
@@ -208,20 +210,17 @@ func LinkInit() error {
 		return nil
 	}
 
-	for _, v := range output {
-		temp := v
-
-		instance, err := NewLinkInstance(&temp)
+	for _, config := range output {
+		instance, err := NewLinkInstance(config)
 		if err != nil {
 			logs.Error(err.Error())
+			continue
 		}
 
-		bind := fmt.Sprintf("%s:%d", temp.Iface, temp.Port)
 		linkCtrl.Cache = append(linkCtrl.Cache, &Link{
-			Cfg: &temp, Instance: instance, Bind: bind,
+			Cfg: config, Instance: instance, Bind: fmt.Sprintf("%s:%d", config.Address, config.Port),
 		})
 	}
 
 	return nil
 }
-

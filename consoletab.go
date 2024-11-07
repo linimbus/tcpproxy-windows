@@ -2,21 +2,22 @@ package main
 
 import (
 	"fmt"
-	"github.com/lxn/walk"
-	. "github.com/lxn/walk/declarative"
 	"sort"
 	"sync"
+
+	"github.com/lxn/walk"
+	. "github.com/lxn/walk/declarative"
 )
 
 type LinkItem struct {
-	Index        int
-	Bind         string
-	Mode         string
-	Count        int
-	Speed        int64
-	Status       string
+	Index   int
+	Bind    string
+	Count   int
+	Speed   int64
+	Traffic int64
+	Status  string
 
-	checked      bool
+	checked bool
 }
 
 type LinkModel struct {
@@ -27,14 +28,14 @@ type LinkModel struct {
 	sortColumn int
 	sortOrder  walk.SortOrder
 
-	items      []*LinkItem
+	items []*LinkItem
 }
 
-func (n *LinkModel)RowCount() int {
+func (n *LinkModel) RowCount() int {
 	return len(n.items)
 }
 
-func (n *LinkModel)Value(row, col int) interface{} {
+func (n *LinkModel) Value(row, col int) interface{} {
 	item := n.items[row]
 	switch col {
 	case 0:
@@ -42,17 +43,11 @@ func (n *LinkModel)Value(row, col int) interface{} {
 	case 1:
 		return item.Bind
 	case 2:
-		return item.Mode
-	case 3:
-		if item.Count == 0 {
-			return "-"
-		}
 		return fmt.Sprintf("%d", item.Count)
-	case 4:
-		if item.Speed == 0 {
-			return "-"
-		}
+	case 3:
 		return fmt.Sprintf("%s/s", ByteView(item.Speed))
+	case 4:
+		return ByteView(item.Traffic)
 	case 5:
 		return item.Status
 	}
@@ -84,11 +79,11 @@ func (m *LinkModel) Sort(col int, order walk.SortOrder) error {
 		case 1:
 			return c(a.Bind < b.Bind)
 		case 2:
-			return c(a.Mode < b.Mode)
-		case 3:
 			return c(a.Count < b.Count)
-		case 4:
+		case 3:
 			return c(a.Speed < b.Speed)
+		case 4:
+			return c(a.Traffic < b.Traffic)
 		case 5:
 			return c(a.Status < b.Status)
 		}
@@ -111,17 +106,16 @@ func StatusToIcon(status string) walk.Image {
 	default:
 		return ICON_STATUS_UNLINK
 	}
-	return nil
 }
 
 var consoleLinkTable *LinkModel
 
-func init()  {
+func init() {
 	consoleLinkTable = new(LinkModel)
 	consoleLinkTable.items = make([]*LinkItem, 0)
 }
 
-func LinkTalbeUpdate(items []*LinkItem )  {
+func LinkTalbeUpdate(items []*LinkItem) {
 	lt := consoleLinkTable
 	idx := tableView.CurrentIndex()
 
@@ -144,7 +138,7 @@ func LinkTalbeUpdate(items []*LinkItem )  {
 	lt.Sort(lt.sortColumn, lt.sortOrder)
 }
 
-func (lk *LinkModel)LinkTableSelectClean()  {
+func (lk *LinkModel) LinkTableSelectClean() {
 	lk.Lock()
 	defer lk.Unlock()
 
@@ -156,7 +150,7 @@ func (lk *LinkModel)LinkTableSelectClean()  {
 	lk.Sort(lk.sortColumn, lk.sortOrder)
 }
 
-func (lk *LinkModel)LinkTableSelectAll()  {
+func (lk *LinkModel) LinkTableSelectAll() {
 	lk.Lock()
 	defer lk.Unlock()
 
@@ -175,7 +169,7 @@ func (lk *LinkModel)LinkTableSelectAll()  {
 	lk.Sort(lk.sortColumn, lk.sortOrder)
 }
 
-func (lt *LinkModel)LinkTableSelectList() []string {
+func (lt *LinkModel) LinkTableSelectList() []string {
 	lt.RLock()
 	defer lt.RUnlock()
 
@@ -189,7 +183,7 @@ func (lt *LinkModel)LinkTableSelectList() []string {
 	return output
 }
 
-func (lt *LinkModel)LinkTableSelectStatus(status string)  {
+func (lt *LinkModel) LinkTableSelectStatus(status string) {
 	lt.Lock()
 	defer lt.Unlock()
 
@@ -207,7 +201,7 @@ func (lt *LinkModel)LinkTableSelectStatus(status string)  {
 	lt.Sort(lt.sortColumn, lt.sortOrder)
 }
 
-func DetailItem()  {
+func DetailItem() {
 	var bind string
 
 	consoleLinkTable.RLock()
@@ -231,18 +225,18 @@ func TableWight() []Widget {
 			Text: "Link List:",
 		},
 		TableView{
-			AssignTo: &tableView,
+			AssignTo:         &tableView,
 			AlternatingRowBG: true,
 			ColumnsOrderable: true,
-			CheckBoxes: true,
+			CheckBoxes:       true,
 			OnItemActivated: func() {
 				DetailItem()
 			},
 			Columns: []TableViewColumn{
 				{Title: "#", Width: 30},
 				{Title: "Bind", Width: 120},
-				{Title: "Mode", Width: 80},
 				{Title: "Connects", Width: 60},
+				{Title: "Speed", Width: 60},
 				{Title: "Traffic", Width: 60},
 				{Title: "Status", Width: 80},
 			},
@@ -258,7 +252,7 @@ func TableWight() []Widget {
 					style.Image = StatusToIcon(item.Status)
 				}
 			},
-			Model:consoleLinkTable,
+			Model: consoleLinkTable,
 		},
 		Composite{
 			Layout: HBox{MarginsZero: true},
@@ -287,11 +281,8 @@ func TableWight() []Widget {
 						}()
 					},
 				},
-				HSpacer{
-
-				},
+				HSpacer{},
 			},
 		},
 	}
 }
-
