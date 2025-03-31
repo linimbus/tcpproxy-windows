@@ -3,6 +3,11 @@
 - support multiple load balance modes
 - support real-time status display
 
+[![Download TcpProxy for Windows](https://img.shields.io/sourceforge/dm/tcpproxy-for-windows.svg)](https://sourceforge.net/projects/tcpproxy-for-windows/files/latest/download)
+
+[![Download TcpProxy for Windows](https://a.fsdn.com/con/app/sf-download-button)](https://sourceforge.net/projects/tcpproxy-for-windows/files/latest/download)
+
+
 ## Build Step
 
 1. Install tools
